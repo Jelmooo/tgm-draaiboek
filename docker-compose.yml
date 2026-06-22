@@ -6,10 +6,11 @@ services:
     # image: tgm-draaiboek:latest
     restart: unless-stopped
     ports:
+      # Cloudflare (Tunnel) stuurt de publieke URL naar deze poort.
       - "8095:3000"
     environment:
       - PORT=3000
       - DATA_DIR=/data
     volumes:
-      # Lokale opslag: de JSON-database blijft op de host bewaard
-      - /DATA/AppData/tgm-draaiboek:/data
+      # Data per app onder /DATA/APPS DATABASE (quotes nodig vanwege de spaties).
+      - "/DATA/APPS DATABASE/tgm-draaiboek:/data"

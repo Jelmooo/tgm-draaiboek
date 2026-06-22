@@ -41,17 +41,25 @@ PORT=8095 DATA_DIR=/pad/naar/data npm start
 
 ### Optie A — via docker compose (aanbevolen)
 
-1. Zet deze map op je CasaOS-systeem (bijv. via Samba of `git clone`).
+1. Clone deze repo in de map met je live websites:
+
+   ```bash
+   cd "/Live Websites"
+   git clone <repo-url>
+   cd tgm-draaiboek
+   ```
+
 2. Bouw en start:
 
    ```bash
    docker compose up -d --build
    ```
 
-3. Open `http://<ip-van-je-server>:8095`.
+3. Testen kan via `http://<ip-van-je-server>:8095`. De publieke URL wordt geregeld
+   door **Cloudflare**, dat naar diezelfde poort verwijst.
 
-De data wordt bewaard in `/DATA/AppData/tgm-draaiboek` op de host (zie `docker-compose.yml`).
-Die map kun je aanpassen naar wens.
+De data wordt bewaard in `/DATA/APPS DATABASE/tgm-draaiboek` op de host
+(zie `docker-compose.yml`). Die map kun je aanpassen naar wens.
 
 ### Optie B — handmatig met Docker
 
@@ -59,24 +67,21 @@ Die map kun je aanpassen naar wens.
 docker build -t tgm-draaiboek .
 docker run -d --name tgm-draaiboek \
   -p 8095:3000 \
-  -v /DATA/AppData/tgm-draaiboek:/data \
+  -v "/DATA/APPS DATABASE/tgm-draaiboek:/data" \
   --restart unless-stopped \
   tgm-draaiboek
 ```
 
-### Optie C — toevoegen via de CasaOS-app ("Custom Install")
+### Serverstructuur
 
-In de CasaOS-app-store kun je via **+ → Install a customized app** zelf een container toevoegen:
+| Wat            | Pad op de server                              |
+|----------------|-----------------------------------------------|
+| Code/website   | `/Live Websites/tgm-draaiboek`           |
+| Data van de app| `/DATA/APPS DATABASE/tgm-draaiboek`      |
+| Poort          | host `8095` → container `3000` (Cloudflare wijst hierheen) |
 
-| Veld          | Waarde                                   |
-|---------------|------------------------------------------|
-| Image         | `tgm-draaiboek:latest` (eerst zelf bouwen) |
-| Web UI Port   | host `8095` → container `3000`           |
-| Volume        | host `/DATA/AppData/tgm-draaiboek` → container `/data` |
-| Environment   | `PORT=3000`, `DATA_DIR=/data`            |
-
-> Tip: CasaOS gebruikt het opgegeven volume zodat je taken bewaard blijven, ook na een
-> herstart of update van de container.
+> Tip: het volume zorgt dat je taken bewaard blijven, ook na een herstart of update
+> van de container.
 
 ## Back-up
 

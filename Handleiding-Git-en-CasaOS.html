@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Handleiding – Git &amp; CasaOS</title>
+<style>
+  :root{
+    --bg:#f6f7fb; --card:#ffffff; --ink:#1d2333; --dim:#5b6275;
+    --accent:#7c5cff; --accent-soft:#efeaff; --line:#e4e6ef;
+    --code-bg:#1d1b2a; --code-ink:#e7e3f7;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
+    line-height:1.6; padding:32px 16px;
+  }
+  .wrap{max-width:840px; margin:0 auto;}
+  header{
+    background:linear-gradient(135deg,#7c5cff,#5a3fd6);
+    color:#fff; border-radius:18px; padding:30px 32px; margin-bottom:22px;
+  }
+  header h1{margin:0 0 6px; font-size:28px;}
+  header p{margin:0; opacity:.9;}
+
+  /* Tabs */
+  .tabs{display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap;}
+  .tab-btn{
+    border:1px solid var(--line); background:var(--card); color:var(--dim);
+    padding:11px 18px; border-radius:12px; font-size:14.5px; font-weight:600;
+    cursor:pointer; font-family:inherit; display:flex; align-items:center; gap:8px;
+    transition:all .15s ease;
+  }
+  .tab-btn:hover{border-color:var(--accent);}
+  .tab-btn.active{background:var(--accent); border-color:var(--accent); color:#fff;}
+  .tab-panel{display:none;}
+  .tab-panel.active{display:block;}
+
+  .card{
+    background:var(--card); border:1px solid var(--line);
+    border-radius:14px; padding:24px 28px; margin-bottom:20px;
+  }
+  h2{font-size:20px; margin:0 0 14px; display:flex; align-items:center; gap:10px;}
+  h2 .num{
+    background:var(--accent-soft); color:var(--accent);
+    width:30px; height:30px; border-radius:8px; display:grid; place-items:center;
+    font-size:15px; flex-shrink:0;
+  }
+  h3{font-size:15px; margin:20px 0 8px; color:var(--dim); text-transform:uppercase; letter-spacing:.03em;}
+  p{margin:8px 0;}
+  code{
+    background:#ecebf6; color:#4a3aa8; padding:2px 6px; border-radius:5px;
+    font-family:"Cascadia Code",Consolas,monospace; font-size:.92em;
+  }
+  pre{
+    background:var(--code-bg); color:var(--code-ink); padding:16px 18px;
+    border-radius:10px; overflow-x:auto; font-family:"Cascadia Code",Consolas,monospace;
+    font-size:14px; line-height:1.6; margin:10px 0;
+  }
+  pre .c{color:#8a86a8;}
+  .note,.warn{
+    border-radius:10px; padding:14px 16px; margin:14px 0; font-size:14.5px;
+    border:1px solid var(--line);
+  }
+  .note{background:#eef6ff;}
+  .warn{background:#fff8e6;}
+  .note b,.warn b{display:block; margin-bottom:3px;}
+  table{border-collapse:collapse; width:100%; margin:10px 0; font-size:14.5px;}
+  th,td{border:1px solid var(--line); padding:9px 12px; text-align:left; vertical-align:top;}
+  th{background:#faf9ff;}
+  .flow{display:flex; align-items:stretch; gap:10px; flex-wrap:wrap; margin:6px 0 4px;}
+  .flow .step{
+    flex:1; min-width:140px; background:#faf9ff; border:1px solid var(--line);
+    border-radius:10px; padding:12px 14px; text-align:center;
+  }
+  .flow .step .big{font-size:24px;}
+  .flow .step b{display:block; margin-top:4px;}
+  .flow .step span{font-size:12.5px; color:var(--dim);}
+  .arrow{align-self:center; color:var(--accent); font-weight:bold; font-size:20px;}
+  .fill{color:#b8860b; font-style:italic;}
+  a{color:var(--accent);}
+  footer{text-align:center; color:var(--dim); font-size:13px; margin-top:10px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>📘 Handleiding – Git &amp; CasaOS</h1>
+    <p>Van project aanmaken tot draaien op je server. Werkt voor elk project.</p>
+  </header>
+
+  <div class="note" style="margin-bottom:20px;">
+    <b>ℹ️ Over de invul-plekken</b>
+    Op een paar plekken staat tekst tussen punthaken, zoals <code>&lt;projectnaam&gt;</code>
+    of <code>&lt;repo-url&gt;</code>. Vervang die (inclusief de punthaken) door je eigen waarde.
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="aanmaken">① Git aanmaken</button>
+    <button class="tab-btn" data-tab="gebruiken">② Git gebruiken</button>
+    <button class="tab-btn" data-tab="casaos">③ Installeren op CasaOS</button>
+    <button class="tab-btn" data-tab="updates">④ Updates sturen</button>
+  </div>
+
+  <!-- ===================== TAB 1: AANMAKEN ===================== -->
+  <div class="tab-panel active" id="tab-aanmaken">
+
+    <div class="card">
+      <h2><span class="num">i</span> Het idee in het kort</h2>
+      <p>Git maakt <b>"opslagpunten"</b> (commits) van je projectmap, zodat je altijd terug kunt
+         en je werk kunt delen of back-uppen. Er zijn twee plekken in het spel:</p>
+      <div class="flow">
+        <div class="step"><div class="big">🖥️</div><b>Jouw pc</b><span>hier bewerk je</span></div>
+        <div class="arrow">→</div>
+        <div class="step"><div class="big">☁️</div><b>GitHub</b><span>online back-up</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="num">0</span> Eenmalig instellen (alleen de eerste keer ooit)</h2>
+      <h3>Wie ben je? (voor je commits)</h3>
+      <pre>git config --global user.name  "<span class="fill">Jouw Naam</span>"
+git config --global user.email "<span class="fill">jouw@email.nl</span>"</pre>
+      <h3>Inloggen bij GitHub (met de GitHub CLI 'gh')</h3>
+      <pre>gh auth login</pre>
+      <p>Kies bij de vragen: <b>GitHub.com</b> → <b>HTTPS</b> → <b>Yes</b> →
+         <b>Login with a web browser</b>. Je krijgt een code die je in je browser plakt.</p>
+    </div>
+
+    <div class="card">
+      <h2><span class="num">1</span> Een nieuw project online zetten</h2>
+      <p>Open een terminal <b>in je projectmap</b> (in Windows Verkenner: klik in de adresbalk,
+         typ <code>powershell</code>, Enter) en typ:</p>
+      <pre>git init -b main                  <span class="c"># maak hier een git-project</span>
+git add .                         <span class="c"># alle bestanden klaarzetten</span>
+git commit -m "Eerste versie"     <span class="c"># eerste opslagpunt</span>
+gh repo create <span class="fill">&lt;projectnaam&gt;</span> --private --source=. --push</pre>
+      <div class="note">
+        <b>Privé of openbaar?</b>
+        <code>--private</code> = alleen jij ziet het. Wil je dat iedereen het mag zien,
+        gebruik dan <code>--public</code>.
+      </div>
+      <p>Klaar! Je code staat nu op <code>https://github.com/&lt;jouw-naam&gt;/&lt;projectnaam&gt;</code>.</p>
+    </div>
+
+  </div>
+
+  <!-- ===================== TAB 2: GEBRUIKEN ===================== -->
+  <div class="tab-panel" id="tab-gebruiken">
+
+    <div class="card">
+      <h2><span class="num">1</span> De dagelijkse routine</h2>
+      <p>Telkens als je iets hebt veranderd en wilt vastleggen, typ je deze vier regels:</p>
+      <pre>git status                      <span class="c"># wat heb ik veranderd?</span>
+git add .                       <span class="c"># alle wijzigingen klaarzetten</span>
+git commit -m "korte uitleg"    <span class="c"># opslagpunt maken (op je pc)</span>
+git push                        <span class="c"># naar GitHub sturen (nu online)</span></pre>
+      <p>Voorbeeld:</p>
+      <pre>git add .
+git commit -m "Tekst op homepagina aangepast"
+git push</pre>
+    </div>
+
+    <div class="card">
+      <h2><span class="num">2</span> Wat doet elk commando?</h2>
+      <table>
+        <tr><th>Commando</th><th>Wat het doet</th></tr>
+        <tr><td><code>git status</code></td>
+            <td>Laat zien wat er veranderd is. Verandert <b>niets</b> — gebruik het zo vaak je wilt.</td></tr>
+        <tr><td><code>git add .</code></td>
+            <td>Neem <b>alle</b> wijzigingen mee in het volgende opslagpunt. (De punt = alles.)</td></tr>
+        <tr><td><code>git commit -m "…"</code></td>
+            <td>Maak een opslagpunt met een kort briefje erbij. Blijft nog op je eigen pc.</td></tr>
+        <tr><td><code>git push</code></td>
+            <td>Stuur je opslagpunten naar GitHub. Pas <b>nu</b> staat het online.</td></tr>
+        <tr><td><code>git pull</code></td>
+            <td>Haal de nieuwste versie op vanaf GitHub (handig op een 2e pc of server).</td></tr>
+        <tr><td><code>git log --oneline</code></td>
+            <td>Toon de lijst met al je opslagpunten (commits).</td></tr>
+      </table>
+      <div class="warn">
+        <b>⚠️ De meest gemaakte beginnersfout</b>
+        <code>commit</code> en <code>push</code> zijn twee aparte stappen.
+        <b>commit</b> = opslaan op je pc (werkt ook offline). <b>push</b> = naar GitHub sturen.
+        Niets staat online totdat je <code>git push</code> hebt gedaan.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="num">?</span> Handige extra's &amp; problemen oplossen</h2>
+      <table>
+        <tr><th>Situatie</th><th>Oplossing</th></tr>
+        <tr><td>Is alles veilig opgeslagen én online?</td>
+            <td><code>git status</code> → "working tree clean" + "up to date with origin/main" = veilig online.</td></tr>
+        <tr><td>Niet-opgeslagen wijzigingen weggooien</td>
+            <td><code>git restore .</code> <b>(let op: maakt niet-opgeslagen wijzigingen ongedaan!)</b></td></tr>
+        <tr><td>"Please tell me who you are" bij commit</td>
+            <td>Stel je naam/e-mail in (zie tab ① → Eenmalig instellen).</td></tr>
+        <tr><td>push vraagt steeds om wachtwoord</td>
+            <td>Niet je GitHub-wachtwoord gebruiken. Log in met <code>gh auth login</code>.</td></tr>
+      </table>
+    </div>
+
+  </div>
+
+  <!-- ===================== TAB 3: CASAOS ===================== -->
+  <div class="tab-panel" id="tab-casaos">
+
+    <div class="card">
+      <h2><span class="num">i</span> De grote lijn</h2>
+      <div class="flow">
+        <div class="step"><div class="big">🖥️</div><b>Jouw pc</b><span>git push</span></div>
+        <div class="arrow">→</div>
+        <div class="step"><div class="big">☁️</div><b>GitHub</b><span>online kopie</span></div>
+        <div class="arrow">→</div>
+        <div class="step"><div class="big">🐳</div><b>CasaOS</b><span>draait als Docker</span></div>
+      </div>
+      <p>Je haalt de code op de server op en bouwt er een Docker-container van.
+         Dit gaat ervan uit dat je project een <code>docker-compose.yml</code> bevat.</p>
+    </div>
+
+    <div class="card">
+      <h2><span class="num">1</span> Eerste keer installeren</h2>
+      <p>Ga naar je CasaOS-server (via SSH of de ingebouwde terminal-app) en typ:</p>
+      <pre><span class="c"># 1. Code ophalen vanaf GitHub (in de map met de live websites)</span>
+cd "/Live Websites"
+git clone <span class="fill">&lt;repo-url&gt;</span>
+cd <span class="fill">&lt;projectnaam&gt;</span>
+
+<span class="c"># 2. Docker-container bouwen en starten</span>
+docker compose up -d --build</pre>
+      <p>Testen kan via <code>http://&lt;ip-van-je-casaos&gt;:&lt;poort&gt;</code>
+         (de poort staat in <code>docker-compose.yml</code>). De nette publieke URL
+         wordt geregeld door <b>Cloudflare</b>, dat naar diezelfde poort verwijst.</p>
+      <div class="note">
+        <b>📁 Waar staat wat op de server?</b>
+        Code/website: <code>/Live Websites/&lt;projectnaam&gt;</code> &nbsp;·&nbsp;
+        Data van de app: <code>/DATA/APPS DATABASE/&lt;projectnaam&gt;</code>
+        (ingesteld als volume in <code>docker-compose.yml</code>).
+      </div>
+      <table>
+        <tr><th>Onderdeel</th><th>Betekenis</th></tr>
+        <tr><td><code>git clone …</code></td><td>Haalt het hele project van GitHub naar de server.</td></tr>
+        <tr><td><code>docker compose up</code></td><td>Bouwt de app tot een Docker-container en start 'm.</td></tr>
+        <tr><td><code>-d</code></td><td>"detached": draait op de achtergrond, ook na uitloggen.</td></tr>
+        <tr><td><code>--build</code></td><td>Bouwt de container (opnieuw) op basis van de nieuwste code.</td></tr>
+      </table>
+      <div class="note">
+        <b>🔒 Privé-repo?</b>
+        Dan vraagt <code>git clone</code> om in te loggen. Gebruik <b>niet</b> je GitHub-wachtwoord,
+        maar log eenmalig in met <code>gh auth login</code> op de server — of zet de repo op publiek.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="num">⚙</span> Handige Docker-commando's</h2>
+      <p>Voer deze uit in de projectmap op de server (<code>/Live Websites/&lt;projectnaam&gt;</code>):</p>
+      <table>
+        <tr><th>Commando</th><th>Wat het doet</th></tr>
+        <tr><td><code>docker compose ps</code></td><td>Draait de app? Toont de status.</td></tr>
+        <tr><td><code>docker compose logs -f</code></td><td>Live meekijken met de app (Ctrl+C om te stoppen).</td></tr>
+        <tr><td><code>docker compose restart</code></td><td>App herstarten zonder opnieuw te bouwen.</td></tr>
+        <tr><td><code>docker compose down</code></td><td>App stoppen en de container verwijderen.</td></tr>
+      </table>
+    </div>
+
+  </div>
+
+  <!-- ===================== TAB 4: UPDATES ===================== -->
+  <div class="tab-panel" id="tab-updates">
+
+    <div class="card">
+      <h2><span class="num">i</span> Een update uitrollen in 2 stappen</h2>
+      <p>Heb je iets aangepast en wil je dat op de server zien? Dat gaat altijd zo:</p>
+      <div class="flow">
+        <div class="step"><div class="big">A</div><b>Op je pc</b><span>push naar GitHub</span></div>
+        <div class="arrow">→</div>
+        <div class="step"><div class="big">B</div><b>Op CasaOS</b><span>pull + opnieuw bouwen</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="num">A</span> Op je pc — wijziging online zetten</h2>
+      <pre>git add .
+git commit -m "<span class="fill">wat je veranderd hebt</span>"
+git push</pre>
+    </div>
+
+    <div class="card">
+      <h2><span class="num">B</span> Op de CasaOS-server — ophalen + opnieuw bouwen</h2>
+      <pre>cd "/Live Websites/<span class="fill">&lt;projectnaam&gt;</span>"
+git pull                        <span class="c"># nieuwste code ophalen</span>
+docker compose up -d --build    <span class="c"># container opnieuw bouwen + starten</span></pre>
+      <div class="note">
+        <b>📦 Je gegevens blijven bewaard</b>
+        De data staat in een apart volume onder
+        <code>/DATA/APPS DATABASE/&lt;projectnaam&gt;</code>, los van de code.
+        Een update gooit je gegevens dus niet weg.
+      </div>
+    </div>
+
+  </div>
+
+  <footer>Bij twijfel: begin altijd met <code>git status</code>. Dat commando verandert nooit iets.</footer>
+
+</div>
+
+<script>
+  document.querySelectorAll('.tab-btn').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
+      document.querySelectorAll('.tab-panel').forEach(function(p){ p.classList.remove('active'); });
+      btn.classList.add('active');
+      document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  });
+</script>
+</body>
+</html>

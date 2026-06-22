@@ -7,18 +7,19 @@ const PRIORITIES = [
   { key: 'laag', label: 'Laag' }
 ];
 const STATUSSES = [
-  { key: 'open', label: 'Nog niet begonnen' },
-  { key: 'bezig', label: 'Bezig' },
-  { key: 'klaar', label: 'Klaar' }
+  { key: 'open', label: 'Nog niet begonnen', short: 'Te doen' },
+  { key: 'bezig', label: 'Bezig', short: 'Bezig' },
+  { key: 'klaar', label: 'Klaar', short: 'Klaar' }
 ];
-const EMOJIS = ['🎨', '💄', '📱', '🏛️', '🔨', '🎭', '💡', '🎵', '🧵', '📣', '🍿', '📋'];
-const COLORS = ['#7c5cff', '#ff5d6c', '#ffb547', '#4fd1c5', '#4aa3ff', '#46c46a', '#e879f9', '#f97316'];
+const EMOJIS = ['🎨', '💄', '📱', '🏛️', '🔨', '🎭', '💡', '🎵', '🧵', '📣', '🍿', '🎟️'];
+const COLORS = ['#6a5ae0', '#ef4d5a', '#f3920b', '#16b07a', '#3b82f6', '#e168c6', '#0ea5a5', '#f25c54'];
 
-// ---------- State ----------
 let state = { sectors: [], tasks: [] };
+const expanded = new Set();
+let editingStepId = null;
 
 const appEl = document.getElementById('app');
-const breadcrumbEl = document.getElementById('breadcrumb');
+const appbarEl = document.getElementById('appbar');
 
 // ---------- Helpers ----------
 function el(tag, props = {}, children = []) {
@@ -31,16 +32,10 @@ function el(tag, props = {}, children = []) {
     else if (v !== null && v !== undefined && v !== false) node.setAttribute(k, v);
   }
   for (const c of [].concat(children)) {
-    if (c == null) continue;
+    if (c == null || c === false) continue;
     node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
   }
   return node;
-}
-
-function esc(s) {
-  return String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])
-  );
 }
 
 async function api(method, url, body) {
@@ -67,15 +62,14 @@ function tasksForSector(sectorId) {
     .sort((a, b) => (a.position || 0) - (b.position || 0));
 }
 
-// Voortgang: subtaken tellen; geen subtaken -> status bepaalt voortgang.
 function taskProgress(task) {
   const subs = task.subtasks || [];
   if (subs.length > 0) {
     const done = subs.filter((s) => s.done).length;
-    return { done, total: subs.length, pct: Math.round((done / subs.length) * 100) };
+    return { done, total: subs.length, pct: Math.round((done / subs.length) * 100), hasSubs: true };
   }
   const pct = task.status === 'klaar' ? 100 : task.status === 'bezig' ? 50 : 0;
-  return { done: task.status === 'klaar' ? 1 : 0, total: 1, pct };
+  return { done: task.status === 'klaar' ? 1 : 0, total: 1, pct, hasSubs: false };
 }
 
 function sectorProgress(sectorId) {
@@ -90,240 +84,298 @@ function formatDate(iso) {
   if (!iso) return null;
   const d = new Date(iso + 'T00:00:00');
   if (isNaN(d)) return iso;
-  return d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' });
+  return d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
+}
+
+// Deadline kan een exacte datum, een week (maandagdatum) of een maand (YYYY-MM) zijn.
+function formatDeadline(task) {
+  if (!task.deadline) return null;
+  const type = task.deadlineType || 'datum';
+  if (type === 'maand') {
+    const [y, m] = task.deadline.split('-').map(Number);
+    return new Date(y, m - 1, 1).toLocaleDateString('nl-NL', { month: 'long', year: 'numeric' });
+  }
+  if (type === 'week') {
+    return 'Week van ' + formatDate(task.deadline);
+  }
+  return formatDate(task.deadline);
+}
+
+function deadlineEnd(task) {
+  const type = task.deadlineType || 'datum';
+  if (type === 'maand') { const [y, m] = task.deadline.split('-').map(Number); return new Date(y, m, 0); }
+  if (type === 'week') { const d = new Date(task.deadline + 'T00:00:00'); d.setDate(d.getDate() + 6); return d; }
+  return new Date(task.deadline + 'T00:00:00');
 }
 
 function isOverdue(task) {
   if (!task.deadline || task.status === 'klaar') return false;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return new Date(task.deadline + 'T00:00:00') < today;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const end = deadlineEnd(task); end.setHours(0, 0, 0, 0);
+  return end < today;
 }
 
-function progressBar(pct, label) {
-  const fill = el('div', {
-    class: 'progress-fill' + (pct > 0 && pct < 100 ? ' partial' : ''),
-    style: `width:${pct}%`
-  });
-  const bar = el('div', { class: 'progress' }, [fill]);
-  if (label == null) return bar;
-  return el('div', { class: 'progress-row' }, [bar, el('span', { class: 'progress-label', text: label })]);
+function progressBar(pct) {
+  const cls = pct >= 100 ? '' : pct > 0 ? ' partial' : ' empty';
+  const width = pct <= 0 ? 0 : Math.max(pct, 4); // bij 0% niets tonen (geen grijs bolletje)
+  return el('div', { class: 'progress' }, [
+    el('div', { class: 'progress-fill' + cls, style: `width:${width}%` })
+  ]);
 }
 
-// ---------- Modal ----------
-const overlay = document.getElementById('modal-overlay');
-const modalTitle = document.getElementById('modal-title');
-const modalBody = document.getElementById('modal-body');
+function setAppbar(children) {
+  appbarEl.innerHTML = '';
+  [].concat(children).forEach((c) => c && appbarEl.appendChild(c));
+}
 
-function openModal(title, bodyNode) {
-  modalTitle.textContent = title;
-  modalBody.innerHTML = '';
-  modalBody.appendChild(bodyNode);
-  overlay.classList.remove('hidden');
+function fab(label, onclick) {
+  return el('button', { class: 'fab', onclick }, [el('span', { class: 'plus', text: '＋' }), label]);
 }
-function closeModal() {
-  overlay.classList.add('hidden');
-  modalBody.innerHTML = '';
+
+// ---------- Bottom sheet ----------
+const overlay = document.getElementById('sheet-overlay');
+const sheetTitle = document.getElementById('sheet-title');
+const sheetBody = document.getElementById('sheet-body');
+const sheetFoot = document.getElementById('sheet-foot');
+
+function openSheet(title, body, foot) {
+  sheetTitle.textContent = title;
+  sheetBody.innerHTML = ''; sheetBody.appendChild(body);
+  sheetFoot.innerHTML = '';
+  [].concat(foot || []).forEach((f) => f && sheetFoot.appendChild(f));
+  sheetFoot.style.display = (foot && [].concat(foot).some(Boolean)) ? 'flex' : 'none';
+  overlay.classList.remove('hidden', 'closing');
 }
-overlay.addEventListener('click', (e) => {
-  if (e.target === overlay || e.target.hasAttribute('data-close-modal')) closeModal();
-});
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && !overlay.classList.contains('hidden')) closeModal();
-});
+function closeSheet() {
+  overlay.classList.add('closing');
+  setTimeout(() => { overlay.classList.add('hidden'); sheetBody.innerHTML = ''; sheetFoot.innerHTML = ''; }, 200);
+}
+overlay.addEventListener('click', (e) => { if (e.target === overlay) closeSheet(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !overlay.classList.contains('hidden')) closeSheet(); });
 
 // ---------- Router ----------
 function router() {
-  const hash = location.hash || '#/';
-  const match = hash.match(/^#\/sector\/(.+)$/);
-  if (match) renderSector(decodeURIComponent(match[1]));
+  const m = (location.hash || '#/').match(/^#\/sector\/(.+)$/);
+  if (m) renderSector(decodeURIComponent(m[1]));
   else renderHome();
 }
-
 window.addEventListener('hashchange', router);
 
 // ---------- Home ----------
 function renderHome() {
-  breadcrumbEl.innerHTML = '';
-  const sectors = state.sectors;
-
-  const head = el('div', { class: 'page-head' }, [
-    el('div', {}, [
-      el('h1', { class: 'page-title' }, ['Sectoren']),
-      el('p', { class: 'page-sub', text: 'Kies een commissie om het draaiboek te bekijken.' })
-    ]),
-    el('button', { class: 'btn btn-primary', onclick: () => openSectorForm() }, ['＋ Sector toevoegen'])
-  ]);
+  setAppbar(el('div', { class: 'appbar-title' }, [el('span', { text: '🎭' }), el('span', { text: 'Draaiboek' })]));
 
   appEl.innerHTML = '';
-  appEl.appendChild(head);
+  appEl.appendChild(el('div', { class: 'greeting' }, [
+    el('h1', { text: 'Onze draaiboeken' }),
+    el('p', { text: 'Tik op een draaiboek om de taken te zien.' })
+  ]));
 
-  if (sectors.length === 0) {
-    appEl.appendChild(emptyState('🎭', 'Nog geen sectoren', 'Voeg je eerste sector toe, bijvoorbeeld de Decorcommissie.'));
-    return;
+  if (state.sectors.length === 0) {
+    appEl.appendChild(emptyState('🎭', 'Nog geen draaiboeken', 'Voeg er hieronder één toe, bijvoorbeeld voor de Decorcommissie.'));
+  } else {
+    const list = el('div', { class: 'sector-list' });
+    for (const s of state.sectors) {
+      const p = sectorProgress(s.id);
+      list.appendChild(el('div', {
+        class: 'sector-card',
+        onclick: () => { location.hash = `#/sector/${s.id}`; }
+      }, [
+        el('div', { class: 'sector-icon', style: `background:${s.color}1f`, text: s.icon }),
+        el('div', { class: 'sector-body' }, [
+          el('div', { class: 'sector-name', text: s.name }),
+          el('div', { class: 'sector-sub', text: p.total === 0 ? 'Nog geen taken' : `${p.klaar} van ${p.total} taken klaar` }),
+          progressBar(p.pct)
+        ]),
+        el('div', { class: 'sector-chev', text: '›' })
+      ]));
+    }
+    appEl.appendChild(list);
   }
 
-  const grid = el('div', { class: 'sector-grid' });
-  for (const sector of sectors) {
-    const prog = sectorProgress(sector.id);
-    const card = el('div', {
-      class: 'sector-card',
-      style: `--sector-color:${sector.color}`,
-      onclick: (e) => {
-        if (e.target.closest('.edit-sector')) return;
-        location.hash = `#/sector/${sector.id}`;
-      }
-    }, [
-      el('button', {
-        class: 'icon-btn edit-sector',
-        title: 'Sector bewerken',
-        onclick: () => openSectorForm(sector)
-      }, ['✎']),
-      el('div', { class: 'sector-card-head' }, [
-        el('div', { class: 'sector-emoji', style: `background:${sector.color}22`, text: sector.icon }),
-        el('div', { class: 'sector-name', text: sector.name })
-      ]),
-      el('div', {
-        class: 'sector-stats',
-        text: prog.total === 0 ? 'Nog geen taken' : `${prog.klaar} van ${prog.total} taken klaar`
-      }),
-      progressBar(prog.pct, `${prog.pct}%`)
-    ]);
-    grid.appendChild(card);
-  }
-  appEl.appendChild(grid);
+  appEl.appendChild(fab('Draaiboek toevoegen', () => openSectorForm()));
 }
 
-// ---------- Sector (takenlijst) ----------
+// ---------- Sector ----------
 function renderSector(sectorId) {
   const sector = state.sectors.find((s) => s.id === sectorId);
-  if (!sector) {
-    location.hash = '#/';
-    return;
-  }
+  if (!sector) { location.hash = '#/'; return; }
 
-  breadcrumbEl.innerHTML = '';
-  breadcrumbEl.appendChild(el('span', { class: 'sep', text: '/' }));
-  breadcrumbEl.appendChild(el('span', { text: `${sector.icon} ${sector.name}` }));
-
-  const tasks = tasksForSector(sectorId);
-  const prog = sectorProgress(sectorId);
-
-  const head = el('div', { class: 'page-head' }, [
-    el('div', {}, [
-      el('h1', { class: 'page-title' }, [
-        el('span', { text: sector.icon }),
-        el('span', { text: sector.name })
-      ]),
-      el('p', {
-        class: 'page-sub',
-        text: prog.total === 0 ? 'Nog geen taken' : `${prog.klaar}/${prog.total} klaar · ${prog.pct}% voltooid`
-      })
+  setAppbar([
+    el('button', { class: 'appbar-back', onclick: () => { location.hash = '#/'; }, 'aria-label': 'Terug' }, ['‹']),
+    el('div', { class: 'appbar-title' }, [
+      el('span', { class: 'appbar-emoji', style: `background:${sector.color}1f`, text: sector.icon }),
+      el('span', { text: sector.name })
     ]),
-    el('button', { class: 'btn btn-primary', onclick: () => openTaskForm(sectorId) }, ['＋ Taak toevoegen'])
+    el('button', { class: 'appbar-back', onclick: () => openSectorForm(sector), 'aria-label': 'Commissie bewerken' }, ['✎'])
   ]);
 
+  const tasks = tasksForSector(sectorId);
+  const p = sectorProgress(sectorId);
+
   appEl.innerHTML = '';
-  appEl.appendChild(head);
+  appEl.appendChild(el('div', { class: 'summary' }, [
+    el('div', { class: 'summary-top' }, [
+      el('div', { class: 'summary-pct', text: `${p.pct}%` }),
+      el('div', { class: 'summary-count', text: p.total === 0 ? 'Nog geen taken' : `${p.klaar}/${p.total} taken klaar` })
+    ]),
+    progressBar(p.pct)
+  ]));
 
   if (tasks.length === 0) {
-    appEl.appendChild(emptyState('📋', 'Nog geen taken', 'Voeg de eerste taak toe voor deze sector.'));
-    return;
+    appEl.appendChild(emptyState('📋', 'Nog geen taken', 'Voeg de eerste taak toe met de knop rechtsonder.'));
+  } else {
+    const list = el('div', { class: 'task-list' });
+    for (const t of tasks) list.appendChild(renderTaskCard(t));
+    appEl.appendChild(list);
   }
 
-  const list = el('div', { class: 'task-list' });
-  for (const task of tasks) list.appendChild(renderTaskCard(task));
-  appEl.appendChild(list);
+  appEl.appendChild(fab('Taak', () => openTaskForm(sectorId)));
 }
 
 function renderTaskCard(task) {
   const prog = taskProgress(task);
-  const prioLabel = (PRIORITIES.find((p) => p.key === task.priority) || {}).label || task.priority;
   const done = prog.pct === 100;
+  const isOpen = expanded.has(task.id);
+  const prioLabel = (PRIORITIES.find((p) => p.key === task.priority) || {}).label || task.priority;
+  const statusObj = STATUSSES.find((s) => s.key === task.status) || STATUSSES[0];
 
-  // Statusselector
-  const statusSelect = el('select', {
-    class: `status-select status-${task.status}`,
-    onchange: async (e) => {
-      await api('PATCH', `/api/tasks/${task.id}`, { status: e.target.value });
-      await refresh();
-    }
-  });
-  for (const s of STATUSSES) {
-    statusSelect.appendChild(el('option', { value: s.key, selected: s.key === task.status ? 'selected' : null, text: s.label }));
-  }
+  // Head (always visible, tappable to expand)
+  const tags = el('div', { class: 'task-tags' }, [
+    el('span', { class: `badge b-${task.status}`, text: statusObj.short }),
+    el('span', { class: `badge b-${task.priority}` }, [el('span', { class: 'dot', style: `background:var(--${task.priority})` }), prioLabel])
+  ]);
 
-  // Meta
   const meta = el('div', { class: 'task-meta' });
-  meta.appendChild(el('span', { class: 'meta-item' }, [el('span', { text: '👤' }), el('span', { text: task.assignee || 'Niemand toegewezen' })]));
+  meta.appendChild(el('span', { class: 'chip-meta' }, [el('span', { text: '👤' }), task.assignee || 'Niemand']));
   if (task.deadline) {
-    meta.appendChild(el('span', { class: 'meta-item' + (isOverdue(task) ? ' overdue' : '') }, [
-      el('span', { text: '📅' }),
-      el('span', { text: formatDate(task.deadline) + (isOverdue(task) ? ' · te laat' : '') })
+    meta.appendChild(el('span', { class: 'chip-meta' + (isOverdue(task) ? ' overdue' : '') }, [
+      el('span', { text: '📅' }), formatDeadline(task) + (isOverdue(task) ? ' · te laat' : '')
     ]));
   }
 
-  const titleRow = el('div', { class: 'task-title-row' }, [
-    el('h3', { class: 'task-title' + (done ? ' done' : ''), text: task.title }),
-    el('span', { class: `badge badge-prio-${task.priority}` }, [el('span', { class: 'dot', style: `background:var(--prio-${task.priority})` }), prioLabel]),
-    statusSelect
+  const head = el('div', { class: 'task-head', onclick: () => toggleTask(task.id) }, [
+    el('div', { class: 'task-titlerow' }, [
+      el('div', { class: 'task-title' + (done ? ' done' : ''), text: task.title }),
+      el('span', { class: 'task-toggle', text: '▾' })
+    ]),
+    tags,
+    meta
   ]);
-
-  const main = el('div', { class: 'task-main' }, [titleRow, meta]);
-  if (task.notes) main.appendChild(el('div', { class: 'task-notes', text: task.notes }));
-
-  const actions = el('div', { class: 'task-actions' }, [
-    el('button', { class: 'icon-btn', title: 'Bewerken', onclick: () => openTaskForm(task.sectorId, task) }, ['✎']),
-    el('button', { class: 'icon-btn', title: 'Verwijderen', onclick: () => confirmDeleteTask(task) }, ['🗑'])
-  ]);
+  if (prog.hasSubs) {
+    head.appendChild(el('div', { class: 'task-progress' }, [
+      progressBar(prog.pct),
+      el('span', { class: 'pp-label', text: `${prog.done}/${prog.total}` })
+    ]));
+  }
 
   const card = el('div', {
-    class: 'task-card',
-    style: `--task-accent:var(--prio-${task.priority})`
-  }, [el('div', { class: 'task-top' }, [main, actions])]);
+    class: 'task-card' + (isOpen ? ' open' : ''),
+    style: `--task-accent:var(--${task.priority})`
+  }, [head]);
 
-  // Subtaken + voortgangsbalk
-  card.appendChild(renderSubtasks(task, prog));
+  if (isOpen) card.appendChild(renderTaskBody(task));
   return card;
 }
 
-function renderSubtasks(task, prog) {
-  const wrap = el('div', { class: 'subtasks' });
-  const total = (task.subtasks || []).length;
+function toggleTask(id) {
+  if (expanded.has(id)) expanded.delete(id); else expanded.add(id);
+  router();
+}
 
-  wrap.appendChild(el('div', { class: 'subtasks-head' }, [
-    el('h4', { text: total > 0 ? `Stappen (${prog.done}/${prog.total})` : 'Stappen' }),
-    total > 0 ? progressBar(prog.pct, `${prog.pct}%`) : null
+function renderTaskBody(task) {
+  const body = el('div', { class: 'task-body' });
+
+  // Status segmented control
+  body.appendChild(el('div', { class: 'section-label', text: 'Status' }));
+  const seg = el('div', { class: 'segmented' });
+  STATUSSES.forEach((s) => {
+    seg.appendChild(el('button', {
+      class: 'seg-btn s-' + s.key + (task.status === s.key ? ' active' : ''),
+      onclick: async () => { editingStepId = null; await api('PATCH', `/api/tasks/${task.id}`, { status: s.key }); await refresh(); }
+    }, [s.short]));
+  });
+  body.appendChild(seg);
+
+  body.appendChild(renderSteps(task));
+
+  body.appendChild(el('div', { class: 'task-actions' }, [
+    el('button', { class: 'btn btn-ghost', onclick: () => openTaskForm(task.sectorId, task) }, ['✎ Bewerken']),
+    el('button', { class: 'btn btn-danger', onclick: () => confirmDeleteTask(task) }, ['🗑 Verwijderen'])
   ]));
 
-  for (const sub of task.subtasks || []) {
-    const cb = el('input', { type: 'checkbox', ...(sub.done ? { checked: 'checked' } : {}) });
-    cb.addEventListener('change', async () => {
-      await api('PATCH', `/api/tasks/${task.id}/subtasks/${sub.id}`, { done: cb.checked });
+  return body;
+}
+
+function renderSteps(task) {
+  const subs = task.subtasks || [];
+  const wrap = el('div', { class: 'subtasks' });
+
+  // Klaar: alle stappen zijn afgerond en worden verborgen.
+  if (task.status === 'klaar') {
+    if (subs.length) wrap.appendChild(el('div', { class: 'steps-done' }, [el('span', { text: '✓' }), `Alle ${subs.length} stappen afgerond`]));
+    return wrap;
+  }
+
+  // Afvinken mag alleen als de taak "Bezig" is.
+  const canCheck = task.status === 'bezig';
+  wrap.appendChild(el('div', { class: 'section-label', text: subs.length ? `Stappen (${subs.filter(s => s.done).length}/${subs.length})` : 'Stappen' }));
+  if (task.status === 'open' && subs.length) {
+    wrap.appendChild(el('div', { class: 'steps-hint', text: 'Zet de taak op "Bezig" om stappen af te vinken.' }));
+  }
+
+  for (const sub of subs) {
+    const check = el('button', {
+      class: 'check' + (sub.done ? ' done' : '') + (canCheck ? '' : ' disabled'),
+      'aria-label': 'Stap afvinken', text: sub.done ? '✓' : ''
+    });
+    if (canCheck) check.addEventListener('click', async () => {
+      await api('PATCH', `/api/tasks/${task.id}/subtasks/${sub.id}`, { done: !sub.done });
       await refresh();
     });
+
+    let titleNode;
+    if (editingStepId === sub.id) {
+      const inp = el('input', { type: 'text', class: 'sub-edit', value: sub.title });
+      const commit = async () => {
+        const v = inp.value.trim();
+        editingStepId = null;
+        if (v && v !== sub.title) await api('PATCH', `/api/tasks/${task.id}/subtasks/${sub.id}`, { title: v });
+        await refresh();
+      };
+      inp.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') commit();
+        else if (e.key === 'Escape') { editingStepId = null; router(); }
+      });
+      inp.addEventListener('blur', commit);
+      setTimeout(() => { inp.focus(); inp.select(); }, 30);
+      titleNode = inp;
+    } else {
+      titleNode = el('span', {
+        class: 'sub-title' + (sub.done ? ' done' : ''), text: sub.title,
+        onclick: () => { editingStepId = sub.id; router(); }
+      });
+    }
+
     wrap.appendChild(el('div', { class: 'subtask' }, [
-      el('label', {}, [cb, el('span', { class: 'sub-title' + (sub.done ? ' done' : ''), text: sub.title })]),
+      check, titleNode,
       el('button', {
-        class: 'icon-btn', title: 'Stap verwijderen',
-        onclick: async () => { await api('DELETE', `/api/tasks/${task.id}/subtasks/${sub.id}`); await refresh(); }
+        class: 'subtask-del', 'aria-label': 'Stap verwijderen',
+        onclick: async () => { editingStepId = null; await api('DELETE', `/api/tasks/${task.id}/subtasks/${sub.id}`); await refresh(); }
       }, ['✕'])
     ]));
   }
 
-  // Nieuwe stap toevoegen
-  const input = el('input', { type: 'text', placeholder: 'Nieuwe stap, bijv. "Verven"' });
-  const add = async () => {
-    const title = input.value.trim();
-    if (!title) return;
-    await api('POST', `/api/tasks/${task.id}/subtasks`, { title });
+  // Nieuwe stap toevoegen (mag bij "Te doen" én "Bezig").
+  const stepInput = el('input', { type: 'text', placeholder: 'Nieuwe stap, bijv. "Verven"' });
+  const addStep = async () => {
+    const v = stepInput.value.trim();
+    if (!v) return;
+    await api('POST', `/api/tasks/${task.id}/subtasks`, { title: v });
     await refresh();
   };
-  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') add(); });
-  wrap.appendChild(el('div', { class: 'subtask-add' }, [
-    input,
-    el('button', { class: 'btn btn-sm', onclick: add }, ['Toevoegen'])
-  ]));
+  stepInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') addStep(); });
+  wrap.appendChild(el('div', { class: 'subtask-add' }, [stepInput, el('button', { class: 'btn btn-sm', onclick: addStep }, ['Toevoegen'])]));
 
   return wrap;
 }
@@ -333,176 +385,204 @@ function field(labelText, inputNode) {
   return el('div', { class: 'field' }, [el('label', { text: labelText }), inputNode]);
 }
 
+function chipChoice(items, current, onPick, colorClass) {
+  const row = el('div', { class: 'choice-row' });
+  let val = current;
+  items.forEach((it) => {
+    const cls = colorClass ? ` c-${it.key}` : '';
+    const chip = el('button', { type: 'button', class: 'choice' + (it.key === val ? ' sel' + cls : ''), text: it.label });
+    chip.addEventListener('click', () => {
+      val = it.key; onPick(val);
+      row.querySelectorAll('.choice').forEach((c) => c.className = 'choice');
+      chip.className = 'choice sel' + cls;
+    });
+    row.appendChild(chip);
+  });
+  return row;
+}
+
 function openTaskForm(sectorId, task) {
   const isEdit = !!task;
   const t = task || { title: '', assignee: '', deadline: '', priority: 'middel', status: 'open', notes: '' };
+  let priority = t.priority, status = t.status;
 
   const titleInput = el('input', { type: 'text', value: t.title, placeholder: 'Bijv. Achterwand' });
   const assigneeInput = el('input', { type: 'text', value: t.assignee, placeholder: 'Wie pakt dit op?' });
-  const deadlineInput = el('input', { type: 'date', value: t.deadline || '' });
   const notesInput = el('textarea', { placeholder: 'Optionele toelichting' });
   notesInput.value = t.notes || '';
 
-  // Prioriteit chips
-  let priority = t.priority;
-  const prioChips = el('div', { class: 'chip-row' });
-  PRIORITIES.forEach((p) => {
-    const chip = el('button', { class: 'chip' + (p.key === priority ? ' selected' : ''), type: 'button', text: p.label });
-    chip.addEventListener('click', () => {
-      priority = p.key;
-      prioChips.querySelectorAll('.chip').forEach((c) => c.classList.remove('selected'));
-      chip.classList.add('selected');
-    });
-    prioChips.appendChild(chip);
-  });
+  // Deadline: kies een type (geen / exacte datum / week / maand) en de bijbehorende waarde.
+  let dlType = t.deadline ? (t.deadlineType || 'datum') : 'geen';
+  let dlValue = t.deadline || '';
+  const isoLocal = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  const mondayOf = (d) => { const x = new Date(d); const off = (x.getDay() + 6) % 7; x.setDate(x.getDate() - off); x.setHours(0, 0, 0, 0); return x; };
+  const dlInputWrap = el('div', {});
 
-  // Status chips
-  let status = t.status;
-  const statusChips = el('div', { class: 'chip-row' });
-  STATUSSES.forEach((s) => {
-    const chip = el('button', { class: 'chip' + (s.key === status ? ' selected' : ''), type: 'button', text: s.label });
+  function buildDateInput() {
+    const inp = el('input', { type: 'date', value: dlType === 'datum' ? dlValue : '' });
+    inp.addEventListener('change', () => { dlValue = inp.value; });
+    return inp;
+  }
+  function buildWeekSelect() {
+    const sel = el('select', { class: 'input' });
+    sel.appendChild(el('option', { value: '', text: 'Kies een week…' }));
+    const start = mondayOf(new Date());
+    let found = false;
+    for (let i = 0; i < 16; i++) {
+      const mon = new Date(start); mon.setDate(start.getDate() + i * 7);
+      const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+      const val = isoLocal(mon);
+      if (val === dlValue) found = true;
+      sel.appendChild(el('option', {
+        value: val, ...(val === dlValue ? { selected: 'selected' } : {}),
+        text: 'Week van ' + mon.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }) + ' t/m ' + sun.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
+      }));
+    }
+    if (dlValue && !found) sel.insertBefore(el('option', { value: dlValue, selected: 'selected', text: 'Week van ' + formatDate(dlValue) }), sel.children[1]);
+    sel.addEventListener('change', () => { dlValue = sel.value; });
+    return sel;
+  }
+  function buildMonthSelect() {
+    const sel = el('select', { class: 'input' });
+    sel.appendChild(el('option', { value: '', text: 'Kies een maand…' }));
+    const now = new Date();
+    let found = false;
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      const val = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+      if (val === dlValue) found = true;
+      sel.appendChild(el('option', { value: val, ...(val === dlValue ? { selected: 'selected' } : {}), text: d.toLocaleDateString('nl-NL', { month: 'long', year: 'numeric' }) }));
+    }
+    if (dlValue && !found) { const [y, m] = dlValue.split('-').map(Number); sel.insertBefore(el('option', { value: dlValue, selected: 'selected', text: new Date(y, m - 1, 1).toLocaleDateString('nl-NL', { month: 'long', year: 'numeric' }) }), sel.children[1]); }
+    sel.addEventListener('change', () => { dlValue = sel.value; });
+    return sel;
+  }
+  function renderDlInput() {
+    dlInputWrap.innerHTML = '';
+    if (dlType === 'datum') dlInputWrap.appendChild(buildDateInput());
+    else if (dlType === 'week') dlInputWrap.appendChild(buildWeekSelect());
+    else if (dlType === 'maand') dlInputWrap.appendChild(buildMonthSelect());
+  }
+  const dlTypeRow = el('div', { class: 'choice-row', style: 'margin-bottom:9px' });
+  [{ key: 'geen', label: 'Geen' }, { key: 'datum', label: 'Datum' }, { key: 'week', label: 'Week' }, { key: 'maand', label: 'Maand' }].forEach((it) => {
+    const chip = el('button', { type: 'button', class: 'choice' + (it.key === dlType ? ' sel' : ''), text: it.label });
     chip.addEventListener('click', () => {
-      status = s.key;
-      statusChips.querySelectorAll('.chip').forEach((c) => c.classList.remove('selected'));
-      chip.classList.add('selected');
+      dlType = it.key; dlValue = '';
+      dlTypeRow.querySelectorAll('.choice').forEach((c) => c.className = 'choice');
+      chip.className = 'choice sel';
+      renderDlInput();
     });
-    statusChips.appendChild(chip);
+    dlTypeRow.appendChild(chip);
   });
+  renderDlInput();
+
+  const body = el('div', {}, [
+    field('Wat moet er gebeuren?', titleInput),
+    field('Wie doet het?', assigneeInput),
+    field('Deadline', el('div', {}, [dlTypeRow, dlInputWrap])),
+    field('Hoe belangrijk?', chipChoice(PRIORITIES, priority, (v) => priority = v, true)),
+    field('Status', chipChoice(STATUSSES.map(s => ({ key: s.key, label: s.short })), status, (v) => status = v)),
+    field('Notitie', notesInput)
+  ]);
 
   const save = async () => {
     if (!titleInput.value.trim()) { titleInput.focus(); return; }
-    const payload = {
-      title: titleInput.value, assignee: assigneeInput.value,
-      deadline: deadlineInput.value, priority, status, notes: notesInput.value
-    };
+    const deadline = dlType === 'geen' ? '' : dlValue;
+    const deadlineType = dlType === 'geen' ? '' : dlType;
+    const payload = { title: titleInput.value, assignee: assigneeInput.value, deadline, deadlineType, priority, status, notes: notesInput.value };
     if (isEdit) await api('PATCH', `/api/tasks/${task.id}`, payload);
-    else await api('POST', '/api/tasks', { sectorId, ...payload });
-    closeModal();
-    await refresh();
+    else { const nt = await api('POST', '/api/tasks', { sectorId, ...payload }); if (nt && nt.id) expanded.add(nt.id); }
+    closeSheet(); await refresh();
   };
 
-  const body = el('div', {}, [
-    field('Taak', titleInput),
-    el('div', { class: 'field-row' }, [field('Verantwoordelijke', assigneeInput), field('Deadline', deadlineInput)]),
-    field('Prioriteit', prioChips),
-    field('Status', statusChips),
-    field('Notities', notesInput),
-    el('div', { class: 'modal-actions' }, [
-      el('button', { class: 'btn', 'data-close-modal': '' }, ['Annuleren']),
-      el('button', { class: 'btn btn-primary', onclick: save }, [isEdit ? 'Opslaan' : 'Toevoegen'])
-    ])
+  openSheet(isEdit ? 'Taak bewerken' : 'Nieuwe taak', body, [
+    el('button', { class: 'btn btn-ghost', onclick: closeSheet }, ['Annuleren']),
+    el('button', { class: 'btn btn-primary', onclick: save }, [isEdit ? 'Opslaan' : 'Toevoegen'])
   ]);
-
-  openModal(isEdit ? 'Taak bewerken' : 'Nieuwe taak', body);
-  setTimeout(() => titleInput.focus(), 50);
+  setTimeout(() => titleInput.focus(), 100);
 }
 
 function confirmDeleteTask(task) {
   const body = el('div', {}, [
-    el('p', { text: `Weet je zeker dat je "${task.title}" wilt verwijderen? Dit kan niet ongedaan gemaakt worden.` }),
-    el('div', { class: 'modal-actions' }, [
-      el('button', { class: 'btn', 'data-close-modal': '' }, ['Annuleren']),
-      el('button', {
-        class: 'btn btn-danger',
-        onclick: async () => { await api('DELETE', `/api/tasks/${task.id}`); closeModal(); await refresh(); }
-      }, ['Verwijderen'])
-    ])
+    el('p', { class: 'confirm-text' }, [el('b', { text: task.title }), ' wordt verwijderd. Dit kan niet ongedaan worden gemaakt.'])
   ]);
-  openModal('Taak verwijderen', body);
+  openSheet('Taak verwijderen?', body, [
+    el('button', { class: 'btn btn-ghost', onclick: closeSheet }, ['Nee, behouden']),
+    el('button', { class: 'btn btn-danger', onclick: async () => { await api('DELETE', `/api/tasks/${task.id}`); expanded.delete(task.id); closeSheet(); await refresh(); } }, ['Ja, verwijderen'])
+  ]);
 }
 
 function openSectorForm(sector) {
   const isEdit = !!sector;
   const s = sector || { name: '', icon: '📋', color: COLORS[0] };
+  let icon = s.icon, color = s.color;
 
   const nameInput = el('input', { type: 'text', value: s.name, placeholder: 'Bijv. Grime' });
 
-  let icon = s.icon;
-  const emojiRow = el('div', { class: 'chip-row emoji-row' });
+  const emojiGrid = el('div', { class: 'emoji-grid' });
   EMOJIS.forEach((e) => {
-    const chip = el('button', { class: 'chip' + (e === icon ? ' selected' : ''), type: 'button', text: e });
-    chip.addEventListener('click', () => {
-      icon = e;
-      emojiRow.querySelectorAll('.chip').forEach((c) => c.classList.remove('selected'));
-      chip.classList.add('selected');
-    });
-    emojiRow.appendChild(chip);
+    const c = el('button', { type: 'button', class: 'choice' + (e === icon ? ' sel' : ''), text: e });
+    c.addEventListener('click', () => { icon = e; emojiGrid.querySelectorAll('.choice').forEach(x => x.className = 'choice'); c.className = 'choice sel'; });
+    emojiGrid.appendChild(c);
   });
 
-  let color = s.color;
   const colorRow = el('div', { class: 'color-row' });
-  COLORS.forEach((c) => {
-    const dot = el('button', { class: 'color-dot' + (c === color ? ' selected' : ''), type: 'button', style: `background:${c}` });
-    dot.addEventListener('click', () => {
-      color = c;
-      colorRow.querySelectorAll('.color-dot').forEach((d) => d.classList.remove('selected'));
-      dot.classList.add('selected');
-    });
-    colorRow.appendChild(dot);
+  COLORS.forEach((col) => {
+    const d = el('button', { type: 'button', class: 'color-dot' + (col === color ? ' sel' : ''), style: `background:${col}` });
+    d.addEventListener('click', () => { color = col; colorRow.querySelectorAll('.color-dot').forEach(x => x.classList.remove('sel')); d.classList.add('sel'); });
+    colorRow.appendChild(d);
   });
+
+  const body = el('div', {}, [field('Naam', nameInput), field('Kies een icoon', emojiGrid), field('Kies een kleur', colorRow)]);
 
   const save = async () => {
     if (!nameInput.value.trim()) { nameInput.focus(); return; }
     const payload = { name: nameInput.value, icon, color };
     if (isEdit) await api('PATCH', `/api/sectors/${sector.id}`, payload);
     else await api('POST', '/api/sectors', payload);
-    closeModal();
-    await refresh();
+    closeSheet(); await refresh();
   };
 
-  const actions = el('div', { class: 'modal-actions' }, [
-    isEdit ? el('button', { class: 'btn btn-danger', onclick: () => confirmDeleteSector(sector) }, ['Verwijderen']) : null,
-    el('div', { class: 'spacer' }),
-    el('button', { class: 'btn', 'data-close-modal': '' }, ['Annuleren']),
+  const foot = [
+    isEdit ? el('button', { class: 'btn btn-danger', onclick: () => confirmDeleteSector(sector) }, ['🗑']) : null,
+    el('button', { class: 'btn btn-ghost', onclick: closeSheet }, ['Annuleren']),
     el('button', { class: 'btn btn-primary', onclick: save }, [isEdit ? 'Opslaan' : 'Toevoegen'])
-  ]);
+  ];
 
-  const body = el('div', {}, [
-    field('Naam', nameInput),
-    field('Icoon', emojiRow),
-    field('Kleur', colorRow),
-    actions
-  ]);
-
-  openModal(isEdit ? 'Sector bewerken' : 'Nieuwe sector', body);
-  setTimeout(() => nameInput.focus(), 50);
+  openSheet(isEdit ? 'Draaiboek bewerken' : 'Nieuw draaiboek', body, foot);
+  setTimeout(() => nameInput.focus(), 100);
 }
 
 function confirmDeleteSector(sector) {
   const count = tasksForSector(sector.id).length;
   const body = el('div', {}, [
-    el('p', { text: `"${sector.name}" verwijderen?${count ? ` Alle ${count} taken hierin worden ook verwijderd.` : ''} Dit kan niet ongedaan gemaakt worden.` }),
-    el('div', { class: 'modal-actions' }, [
-      el('button', { class: 'btn', 'data-close-modal': '' }, ['Annuleren']),
-      el('button', {
-        class: 'btn btn-danger',
-        onclick: async () => { await api('DELETE', `/api/sectors/${sector.id}`); closeModal(); location.hash = '#/'; await refresh(); }
-      }, ['Verwijderen'])
+    el('p', { class: 'confirm-text' }, [
+      el('b', { text: sector.name }), ` wordt verwijderd${count ? `, samen met alle ${count} taken erin` : ''}. Dit kan niet ongedaan worden gemaakt.`
     ])
   ]);
-  openModal('Sector verwijderen', body);
+  openSheet('Draaiboek verwijderen?', body, [
+    el('button', { class: 'btn btn-ghost', onclick: closeSheet }, ['Nee, behouden']),
+    el('button', { class: 'btn btn-danger', onclick: async () => { await api('DELETE', `/api/sectors/${sector.id}`); closeSheet(); location.hash = '#/'; await refresh(); } }, ['Ja, verwijderen'])
+  ]);
 }
 
 // ---------- Util ----------
 function emptyState(emoji, title, sub) {
   return el('div', { class: 'empty' }, [
-    el('span', { class: 'empty-emoji', text: emoji }),
-    el('div', { style: 'font-size:18px;font-weight:700;color:var(--text);margin-bottom:6px', text: title }),
-    el('div', { text: sub })
+    el('div', { class: 'empty-emoji', text: emoji }),
+    el('h3', { text: title }),
+    el('p', { text: sub })
   ]);
 }
 
-async function refresh() {
-  await loadState();
-  router();
-}
+async function refresh() { await loadState(); router(); }
 
 // ---------- Start ----------
 (async function init() {
-  try {
-    await loadState();
-  } catch (err) {
-    appEl.innerHTML = `<div class="empty"><span class="empty-emoji">⚠️</span><div>Kon de gegevens niet laden.<br>${esc(err.message)}</div></div>`;
+  try { await loadState(); }
+  catch (err) {
+    appEl.innerHTML = '';
+    appEl.appendChild(emptyState('⚠️', 'Kon de gegevens niet laden', err.message));
     return;
   }
   router();

@@ -133,6 +133,15 @@ function cleanStatus(s) {
   return STATUSSES.includes(s) ? s : 'open';
 }
 
+const DEADLINE_TYPES = ['datum', 'week', 'maand'];
+
+// Houd deadline en deadlineType consistent: geen deadline => geen type;
+// wel een deadline maar geen geldig type => standaard 'datum'.
+function normalizeDeadline(task) {
+  if (!task.deadline) { task.deadlineType = ''; return; }
+  if (!DEADLINE_TYPES.includes(task.deadlineType)) task.deadlineType = 'datum';
+}
+
 function addTask(data) {
   const sector = state.sectors.find((s) => s.id === data.sectorId);
   if (!sector) return null;
@@ -142,12 +151,14 @@ function addTask(data) {
     title: String(data.title || '').trim() || 'Naamloze taak',
     assignee: String(data.assignee || '').trim(),
     deadline: data.deadline || '',
+    deadlineType: data.deadlineType || '',
     priority: cleanPriority(data.priority),
     status: cleanStatus(data.status),
     notes: String(data.notes || ''),
     position: listTasks(data.sectorId).length,
     subtasks: []
   };
+  normalizeDeadline(task);
   state.tasks.push(task);
   save();
   return task;
@@ -159,9 +170,15 @@ function updateTask(taskId, patch) {
   if (patch.title !== undefined) task.title = String(patch.title).trim() || task.title;
   if (patch.assignee !== undefined) task.assignee = String(patch.assignee).trim();
   if (patch.deadline !== undefined) task.deadline = patch.deadline || '';
+  if (patch.deadlineType !== undefined) task.deadlineType = patch.deadlineType || '';
   if (patch.priority !== undefined) task.priority = cleanPriority(patch.priority);
-  if (patch.status !== undefined) task.status = cleanStatus(patch.status);
   if (patch.notes !== undefined) task.notes = String(patch.notes);
+  if (patch.status !== undefined) {
+    task.status = cleanStatus(patch.status);
+    // "Klaar" betekent: alle stappen afgerond.
+    if (task.status === 'klaar') task.subtasks.forEach((s) => { s.done = true; });
+  }
+  normalizeDeadline(task);
   save();
   return task;
 }

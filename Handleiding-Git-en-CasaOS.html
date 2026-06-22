@@ -16,7 +16,7 @@
     font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
     line-height:1.6; padding:32px 16px;
   }
-  .wrap{max-width:840px; margin:0 auto;}
+  .wrap{max-width:860px; margin:0 auto;}
   header{
     background:linear-gradient(135deg,#7c5cff,#5a3fd6);
     color:#fff; border-radius:18px; padding:30px 32px; margin-bottom:22px;
@@ -28,7 +28,7 @@
   .tabs{display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap;}
   .tab-btn{
     border:1px solid var(--line); background:var(--card); color:var(--dim);
-    padding:11px 18px; border-radius:12px; font-size:14.5px; font-weight:600;
+    padding:11px 16px; border-radius:12px; font-size:14px; font-weight:600;
     cursor:pointer; font-family:inherit; display:flex; align-items:center; gap:8px;
     transition:all .15s ease;
   }
@@ -59,19 +59,20 @@
     font-size:14px; line-height:1.6; margin:10px 0;
   }
   pre .c{color:#8a86a8;}
-  .note,.warn{
+  .note,.warn,.tip{
     border-radius:10px; padding:14px 16px; margin:14px 0; font-size:14.5px;
     border:1px solid var(--line);
   }
   .note{background:#eef6ff;}
   .warn{background:#fff8e6;}
-  .note b,.warn b{display:block; margin-bottom:3px;}
+  .tip{background:#eafaf0;}
+  .note b,.warn b,.tip b{display:block; margin-bottom:3px;}
   table{border-collapse:collapse; width:100%; margin:10px 0; font-size:14.5px;}
   th,td{border:1px solid var(--line); padding:9px 12px; text-align:left; vertical-align:top;}
   th{background:#faf9ff;}
   .flow{display:flex; align-items:stretch; gap:10px; flex-wrap:wrap; margin:6px 0 4px;}
   .flow .step{
-    flex:1; min-width:140px; background:#faf9ff; border:1px solid var(--line);
+    flex:1; min-width:130px; background:#faf9ff; border:1px solid var(--line);
     border-radius:10px; padding:12px 14px; text-align:center;
   }
   .flow .step .big{font-size:24px;}
@@ -88,13 +89,21 @@
 
   <header>
     <h1>📘 Handleiding – Git &amp; CasaOS</h1>
-    <p>Van project aanmaken tot draaien op je server. Werkt voor elk project.</p>
+    <p>Van project aanmaken tot draaien op je server. Afgestemd op jouw eigen opzet.</p>
   </header>
 
-  <div class="note" style="margin-bottom:20px;">
+  <div class="note" style="margin-bottom:14px;">
     <b>ℹ️ Over de invul-plekken</b>
-    Op een paar plekken staat tekst tussen punthaken, zoals <code>&lt;projectnaam&gt;</code>
-    of <code>&lt;repo-url&gt;</code>. Vervang die (inclusief de punthaken) door je eigen waarde.
+    Op een paar plekken staat tekst tussen punthaken, zoals <code>&lt;projectnaam&gt;</code>,
+    <code>&lt;repo-url&gt;</code> of <code>&lt;poort&gt;</code>. Vervang die (inclusief de punthaken)
+    door je eigen waarde.
+  </div>
+  <div class="tip" style="margin-bottom:20px;">
+    <b>🗂️ Jouw vaste serverstructuur</b>
+    Code/website → <code>/Live Websites/&lt;projectnaam&gt;</code> &nbsp;·&nbsp;
+    Data van een app → <code>/DATA/APPS DATABASE/&lt;projectnaam&gt;</code> &nbsp;·&nbsp;
+    Publieke URL → via <b>Cloudflare</b>. Je logt op de server in als gebruiker <code>ubuntu</code>
+    (dus <code>sudo</code> nodig voor Docker).
   </div>
 
   <div class="tabs">
@@ -102,6 +111,7 @@
     <button class="tab-btn" data-tab="gebruiken">② Git gebruiken</button>
     <button class="tab-btn" data-tab="casaos">③ Installeren op CasaOS</button>
     <button class="tab-btn" data-tab="updates">④ Updates sturen</button>
+    <button class="tab-btn" data-tab="problemen">⑤ Problemen oplossen</button>
   </div>
 
   <!-- ===================== TAB 1: AANMAKEN ===================== -->
@@ -127,6 +137,11 @@ git config --global user.email "<span class="fill">jouw@email.nl</span>"</pre>
       <pre>gh auth login</pre>
       <p>Kies bij de vragen: <b>GitHub.com</b> → <b>HTTPS</b> → <b>Yes</b> →
          <b>Login with a web browser</b>. Je krijgt een code die je in je browser plakt.</p>
+      <div class="warn">
+        <b>⚠️ Belangrijk als je met Google inlogt bij GitHub</b>
+        Dan heb je géén GitHub-wachtwoord. Git accepteert sowieso geen wachtwoorden meer.
+        Authenticatie loopt daarom via <code>gh auth login</code> (hierboven) — niet via een wachtwoord.
+      </div>
     </div>
 
     <div class="card">
@@ -136,13 +151,18 @@ git config --global user.email "<span class="fill">jouw@email.nl</span>"</pre>
       <pre>git init -b main                  <span class="c"># maak hier een git-project</span>
 git add .                         <span class="c"># alle bestanden klaarzetten</span>
 git commit -m "Eerste versie"     <span class="c"># eerste opslagpunt</span>
-gh repo create <span class="fill">&lt;projectnaam&gt;</span> --private --source=. --push</pre>
+gh repo create <span class="fill">&lt;projectnaam&gt;</span> --public --source=. --push</pre>
       <div class="note">
-        <b>Privé of openbaar?</b>
-        <code>--private</code> = alleen jij ziet het. Wil je dat iedereen het mag zien,
-        gebruik dan <code>--public</code>.
+        <b>Publiek of privé?</b>
+        <code>--public</code> = iedereen met de link ziet de code (simpelst: clonen op de server
+        zonder inloggen). <code>--private</code> = alleen jij — maar dan moet je op de server inloggen
+        met <code>gh auth login</code> of een token. <b>Voor hobbyprojecten zonder geheimen is publiek prima.</b>
       </div>
-      <p>Klaar! Je code staat nu op <code>https://github.com/&lt;jouw-naam&gt;/&lt;projectnaam&gt;</code>.</p>
+      <div class="warn">
+        <b>🔑 Gouden regel</b>
+        Zet <b>nooit</b> wachtwoorden, API-sleutels of tokens in een repo (ook niet in een privé-repo).
+        Houd die in een Docker-volume of in omgevingsvariabelen.
+      </div>
     </div>
 
   </div>
@@ -176,7 +196,7 @@ git push</pre>
         <tr><td><code>git push</code></td>
             <td>Stuur je opslagpunten naar GitHub. Pas <b>nu</b> staat het online.</td></tr>
         <tr><td><code>git pull</code></td>
-            <td>Haal de nieuwste versie op vanaf GitHub (handig op een 2e pc of server).</td></tr>
+            <td>Haal de nieuwste versie op vanaf GitHub (op een 2e pc of op de server).</td></tr>
         <tr><td><code>git log --oneline</code></td>
             <td>Toon de lijst met al je opslagpunten (commits).</td></tr>
       </table>
@@ -186,21 +206,12 @@ git push</pre>
         <b>commit</b> = opslaan op je pc (werkt ook offline). <b>push</b> = naar GitHub sturen.
         Niets staat online totdat je <code>git push</code> hebt gedaan.
       </div>
-    </div>
-
-    <div class="card">
-      <h2><span class="num">?</span> Handige extra's &amp; problemen oplossen</h2>
-      <table>
-        <tr><th>Situatie</th><th>Oplossing</th></tr>
-        <tr><td>Is alles veilig opgeslagen én online?</td>
-            <td><code>git status</code> → "working tree clean" + "up to date with origin/main" = veilig online.</td></tr>
-        <tr><td>Niet-opgeslagen wijzigingen weggooien</td>
-            <td><code>git restore .</code> <b>(let op: maakt niet-opgeslagen wijzigingen ongedaan!)</b></td></tr>
-        <tr><td>"Please tell me who you are" bij commit</td>
-            <td>Stel je naam/e-mail in (zie tab ① → Eenmalig instellen).</td></tr>
-        <tr><td>push vraagt steeds om wachtwoord</td>
-            <td>Niet je GitHub-wachtwoord gebruiken. Log in met <code>gh auth login</code>.</td></tr>
-      </table>
+      <div class="tip">
+        <b>⭐ Onthoud de volgorde: eerst pushen, dan pullen</b>
+        De server haalt op wat er <b>op GitHub</b> staat. Vergeet je op je pc te <code>push</code>en,
+        dan trekt de server de oude versie binnen. Altijd eerst op je pc pushen, daarna pas
+        op de server pullen.
+      </div>
     </div>
 
   </div>
@@ -217,53 +228,84 @@ git push</pre>
         <div class="arrow">→</div>
         <div class="step"><div class="big">🐳</div><b>CasaOS</b><span>draait als Docker</span></div>
       </div>
-      <p>Je haalt de code op de server op en bouwt er een Docker-container van.
-         Dit gaat ervan uit dat je project een <code>docker-compose.yml</code> bevat.</p>
+      <p>Je haalt de code op de server op en bouwt er een Docker-container van. Cloudflare zorgt
+         voor de publieke URL. Dit gaat ervan uit dat je project een <code>docker-compose.yml</code>
+         bevat met daarin de poort en het datavolume.</p>
     </div>
 
     <div class="card">
       <h2><span class="num">1</span> Eerste keer installeren</h2>
       <p>Ga naar je CasaOS-server (via SSH of de ingebouwde terminal-app) en typ:</p>
-      <pre><span class="c"># 1. Code ophalen vanaf GitHub (in de map met de live websites)</span>
+      <pre><span class="c"># 1. Code ophalen in de map met live websites</span>
 cd "/Live Websites"
 git clone <span class="fill">&lt;repo-url&gt;</span>
 cd <span class="fill">&lt;projectnaam&gt;</span>
 
-<span class="c"># 2. Docker-container bouwen en starten</span>
-docker compose up -d --build</pre>
-      <p>Testen kan via <code>http://&lt;ip-van-je-casaos&gt;:&lt;poort&gt;</code>
-         (de poort staat in <code>docker-compose.yml</code>). De nette publieke URL
-         wordt geregeld door <b>Cloudflare</b>, dat naar diezelfde poort verwijst.</p>
-      <div class="note">
-        <b>📁 Waar staat wat op de server?</b>
-        Code/website: <code>/Live Websites/&lt;projectnaam&gt;</code> &nbsp;·&nbsp;
-        Data van de app: <code>/DATA/APPS DATABASE/&lt;projectnaam&gt;</code>
-        (ingesteld als volume in <code>docker-compose.yml</code>).
+<span class="c"># 2. Docker-container bouwen en starten (sudo: jij bent gebruiker 'ubuntu')</span>
+sudo docker compose up -d --build</pre>
+      <p>De eerste keer duurt het bouwen een minuutje (image downloaden + installeren).
+         Aan het eind staat er zoiets als <code>Container &lt;naam&gt; Started</code>.</p>
+      <div class="warn">
+        <b>📌 Mappen met een spatie? Zet ze tussen quotes</b>
+        <code>cd /Live Websites</code> geeft een fout ("too many arguments").
+        Gebruik altijd <code>cd "/Live Websites"</code>.
       </div>
-      <table>
-        <tr><th>Onderdeel</th><th>Betekenis</th></tr>
-        <tr><td><code>git clone …</code></td><td>Haalt het hele project van GitHub naar de server.</td></tr>
-        <tr><td><code>docker compose up</code></td><td>Bouwt de app tot een Docker-container en start 'm.</td></tr>
-        <tr><td><code>-d</code></td><td>"detached": draait op de achtergrond, ook na uitloggen.</td></tr>
-        <tr><td><code>--build</code></td><td>Bouwt de container (opnieuw) op basis van de nieuwste code.</td></tr>
-      </table>
       <div class="note">
-        <b>🔒 Privé-repo?</b>
+        <b>🔒 Is je repo privé?</b>
         Dan vraagt <code>git clone</code> om in te loggen. Gebruik <b>niet</b> je GitHub-wachtwoord,
         maar log eenmalig in met <code>gh auth login</code> op de server — of zet de repo op publiek.
       </div>
     </div>
 
     <div class="card">
-      <h2><span class="num">⚙</span> Handige Docker-commando's</h2>
-      <p>Voer deze uit in de projectmap op de server (<code>/Live Websites/&lt;projectnaam&gt;</code>):</p>
+      <h2><span class="num">2</span> Controleren of het draait</h2>
+      <pre>sudo docker compose ps          <span class="c"># STATUS moet "Up" zijn</span>
+sudo docker compose logs --tail=40   <span class="c"># laatste meldingen / fouten</span>
+curl http://localhost:<span class="fill">&lt;poort&gt;</span>          <span class="c"># geeft de app antwoord?</span></pre>
+      <p>Testen vanaf je gewone pc kan via <code>http://&lt;ip-van-de-server&gt;:&lt;poort&gt;</code>.
+         De nette publieke URL regel je daarna in <b>Cloudflare</b> (laat die naar diezelfde poort wijzen).</p>
+    </div>
+
+    <div class="card">
+      <h2><span class="num">💾</span> Hoe blijft mijn data bewaard?</h2>
+      <p>In <code>docker-compose.yml</code> staat een <b>volume</b>, bijvoorbeeld:</p>
+      <pre>volumes:
+  - "/DATA/APPS DATABASE/<span class="fill">&lt;projectnaam&gt;</span>:/data"</pre>
+      <p>Dit koppelt een map op de server aan de container. Daardoor:</p>
+      <ul>
+        <li>Leeft je data <b>op de server-schijf</b>, búíten de container.</li>
+        <li>Blijft alles bewaard bij <b>herstart, opnieuw bouwen, update en zelfs verwijderen</b> van de container.</li>
+        <li>Maakt de app meestal alleen de <b>eerste keer</b> voorbeelddata aan; daarna wordt je eigen data nooit overschreven.</li>
+      </ul>
+      <div class="warn">
+        <b>⚠️ Verander het volumepad niet zomaar</b>
+        Wijzig je het pad links van de <code>:</code>, dan kijkt de app ineens in een lege map
+        en lijkt je data "weg". (Hij staat dan nog op het oude pad.)
+      </div>
+      <div class="tip">
+        <b>📦 Back-up maken</b>
+        <pre style="margin:6px 0 0;">sudo cp "/DATA/APPS DATABASE/<span class="fill">&lt;projectnaam&gt;</span>/<span class="fill">&lt;databestand&gt;</span>" ~/backup-$(date +%F).json</pre>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="num">⚠</span> Let op met de CasaOS-GUI</h2>
+      <p>CasaOS toont je container als een app-tegeltje. Wat je daar wél en níét mee moet:</p>
       <table>
-        <tr><th>Commando</th><th>Wat het doet</th></tr>
-        <tr><td><code>docker compose ps</code></td><td>Draait de app? Toont de status.</td></tr>
-        <tr><td><code>docker compose logs -f</code></td><td>Live meekijken met de app (Ctrl+C om te stoppen).</td></tr>
-        <tr><td><code>docker compose restart</code></td><td>App herstarten zonder opnieuw te bouwen.</td></tr>
-        <tr><td><code>docker compose down</code></td><td>App stoppen en de container verwijderen.</td></tr>
+        <tr><th>Wel via de GUI</th><th>Niet via de GUI</th></tr>
+        <tr>
+          <td>Starten / stoppen / herstarten, logs bekijken, app verwijderen.</td>
+          <td>De <b>instellingen</b> (image, poort, volume, environment) bewerken.</td>
+        </tr>
       </table>
+      <div class="note">
+        <b>Waarom niet?</b>
+        Een app die uit broncode wordt gebouwd, wordt beheerd door je <code>docker-compose.yml</code>.
+        Dat bestand (in git) is de "waarheid". Wijzig je iets via de GUI en sla je op, dan ontstaat
+        een conflict — bij de volgende <code>docker compose up</code> wordt het weer overschreven.
+        Daarom toont het GUI-formulier ook een lege image: het kan zo'n app niet goed bewerken.
+        <b>Instellingen wijzig je dus in <code>docker-compose.yml</code> + git, niet in de GUI.</b>
+      </div>
     </div>
 
   </div>
@@ -279,6 +321,11 @@ docker compose up -d --build</pre>
         <div class="arrow">→</div>
         <div class="step"><div class="big">B</div><b>Op CasaOS</b><span>pull + opnieuw bouwen</span></div>
       </div>
+      <div class="tip">
+        <b>⭐ De volgorde is cruciaal</b>
+        Eerst stap A (pushen op je pc), pas daarna stap B (pullen op de server). Sla je stap A over,
+        dan haalt de server de oude code op en lijkt je wijziging "niet door te komen".
+      </div>
     </div>
 
     <div class="card">
@@ -286,24 +333,92 @@ docker compose up -d --build</pre>
       <pre>git add .
 git commit -m "<span class="fill">wat je veranderd hebt</span>"
 git push</pre>
+      <p>Check eventueel met <code>git status</code>: "up to date with origin/main" = veilig online.</p>
     </div>
 
     <div class="card">
-      <h2><span class="num">B</span> Op de CasaOS-server — ophalen + opnieuw bouwen</h2>
+      <h2><span class="num">B</span> Op de server — ophalen + opnieuw bouwen</h2>
       <pre>cd "/Live Websites/<span class="fill">&lt;projectnaam&gt;</span>"
 git pull                        <span class="c"># nieuwste code ophalen</span>
-docker compose up -d --build    <span class="c"># container opnieuw bouwen + starten</span></pre>
+sudo docker compose up -d --build    <span class="c"># container opnieuw bouwen + starten</span></pre>
       <div class="note">
         <b>📦 Je gegevens blijven bewaard</b>
-        De data staat in een apart volume onder
-        <code>/DATA/APPS DATABASE/&lt;projectnaam&gt;</code>, los van de code.
-        Een update gooit je gegevens dus niet weg.
+        De data staat in een volume onder <code>/DATA/APPS DATABASE/&lt;projectnaam&gt;</code>,
+        los van de code. Een update gooit je gegevens dus niet weg. (Zie tab ③ → "Hoe blijft mijn data bewaard?")
       </div>
     </div>
 
   </div>
 
-  <footer>Bij twijfel: begin altijd met <code>git status</code>. Dat commando verandert nooit iets.</footer>
+  <!-- ===================== TAB 5: PROBLEMEN ===================== -->
+  <div class="tab-panel" id="tab-problemen">
+
+    <div class="card">
+      <h2><span class="num">?</span> Veelvoorkomende fouten &amp; oplossingen</h2>
+      <table>
+        <tr><th>Foutmelding / situatie</th><th>Oplossing</th></tr>
+
+        <tr>
+          <td><code>Password authentication is not supported</code> bij git clone/push</td>
+          <td>GitHub accepteert geen wachtwoorden. Log in met <code>gh auth login</code>,
+              of zet de repo op publiek (zie tab ①). Met Google-login heb je sowieso geen wachtwoord.</td>
+        </tr>
+
+        <tr>
+          <td><code>permission denied … /var/run/docker.sock</code></td>
+          <td>Zet <code>sudo</code> vóór het docker-commando:
+              <code>sudo docker compose up -d --build</code>.<br>
+              Geen sudo meer willen typen? <code>sudo usermod -aG docker ubuntu</code>,
+              daarna <b>uitloggen en opnieuw inloggen</b>.</td>
+        </tr>
+
+        <tr>
+          <td><code>bash: cd: too many arguments</code></td>
+          <td>Het pad bevat een spatie. Zet het tussen quotes:
+              <code>cd "/Live Websites"</code>.</td>
+        </tr>
+
+        <tr>
+          <td>Ik weet niet waar een map staat (bijv. "root")</td>
+          <td><code>ls /</code> toont de mappen bovenaan het systeem.<br>
+              Zoeken: <code>sudo find / -maxdepth 5 -iname "<span class="fill">naam</span>" 2>/dev/null</code></td>
+        </tr>
+
+        <tr>
+          <td>De CasaOS-GUI toont een lege image of een verkeerd volume</td>
+          <td>Normaal voor een compose-app. <b>Niet</b> via de GUI bewerken — beheer via
+              <code>docker-compose.yml</code> + git (zie tab ③).</td>
+        </tr>
+
+        <tr>
+          <td>App start niet / pagina laadt niet</td>
+          <td><code>sudo docker compose ps</code> (draait 'ie? = "Up") en
+              <code>sudo docker compose logs --tail=40</code> (foutmelding?).</td>
+        </tr>
+
+        <tr>
+          <td>Server draait nog de oude versie na een update</td>
+          <td>Heb je op je pc <code>git push</code> gedaan? Eerst pushen, dán
+              <code>git pull</code> op de server. Daarna <code>sudo docker compose up -d --build</code>.</td>
+        </tr>
+
+        <tr>
+          <td>Mijn data lijkt "weg" na een wijziging</td>
+          <td>Waarschijnlijk is het volumepad veranderd. De data staat nog op het oude pad —
+              kopieer het databestand naar het nieuwe pad (zie tab ③).</td>
+        </tr>
+
+        <tr>
+          <td><code>Please tell me who you are</code> bij commit</td>
+          <td>Stel je naam/e-mail in (zie tab ① → Eenmalig instellen).</td>
+        </tr>
+      </table>
+    </div>
+
+  </div>
+
+  <footer>Bij twijfel: begin altijd met <code>git status</code> (op je pc) of
+    <code>sudo docker compose ps</code> (op de server). Die commando's veranderen niets.</footer>
 
 </div>
 

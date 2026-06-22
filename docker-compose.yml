@@ -1,0 +1,15 @@
+services:
+  draaiboek:
+    container_name: tgm-draaiboek
+    build: .
+    # Of gebruik een vooraf gebouwde image i.p.v. build:
+    # image: tgm-draaiboek:latest
+    restart: unless-stopped
+    ports:
+      - "8095:3000"
+    environment:
+      - PORT=3000
+      - DATA_DIR=/data
+    volumes:
+      # Lokale opslag: de JSON-database blijft op de host bewaard
+      - /DATA/AppData/tgm-draaiboek:/data

@@ -1,0 +1,3 @@
+# Forceer LF-regeleinden zodat de container op CasaOS (Linux) geen rare
+# regeleinden krijgt, ook al wordt er op Windows ontwikkeld.
+* text=auto eol=lf

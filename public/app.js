@@ -15,8 +15,22 @@ const EMOJIS = ['🎨', '💄', '📱', '🏛️', '🔨', '🎭', '💡', '🎵
 const COLORS = ['#6a5ae0', '#ef4d5a', '#f3920b', '#16b07a', '#3b82f6', '#e168c6', '#0ea5a5', '#f25c54'];
 
 let state = { sectors: [], tasks: [] };
-const expanded = new Set();
+let expandedTask = null; // accordion: er staat altijd hooguit één taak open
 let editingStepId = null;
+let addingStepFor = null; // welke taak het "nieuwe stap"-veld open heeft staan
+
+// Filters/zoeken (per sector)
+let filterStatus = 'alles';
+let filterPerson = '';
+let searchQuery = '';
+let filterSectorId = null;
+
+// Animatie-hulpvlaggen (zo speelt een animatie alleen bij de échte actie)
+let justOpenedTask = null;
+let justAddedStepId = null;
+let lastRoute = null;
+let animateView = false;
+let navDir = 'right';
 
 const appEl = document.getElementById('app');
 const appbarEl = document.getElementById('appbar');
@@ -72,6 +86,29 @@ function taskProgress(task) {
   return { done: task.status === 'klaar' ? 1 : 0, total: 1, pct, hasSubs: false };
 }
 
+function peopleInSector(sectorId) {
+  const set = new Set();
+  tasksForSector(sectorId).forEach((t) => { const a = (t.assignee || '').trim(); if (a) set.add(a); });
+  return [...set].sort((a, b) => a.localeCompare(b, 'nl'));
+}
+
+// Pas zoek- en filterinstellingen toe op de taken van een sector.
+function filteredTasks(sectorId) {
+  let tasks = tasksForSector(sectorId);
+  if (filterStatus !== 'alles') tasks = tasks.filter((t) => t.status === filterStatus);
+  if (filterPerson) tasks = tasks.filter((t) => (t.assignee || '').trim() === filterPerson);
+  const q = searchQuery.trim().toLowerCase();
+  if (q) {
+    tasks = tasks.filter((t) =>
+      (t.title || '').toLowerCase().includes(q) ||
+      (t.assignee || '').toLowerCase().includes(q) ||
+      (t.notes || '').toLowerCase().includes(q) ||
+      (t.subtasks || []).some((s) => (s.title || '').toLowerCase().includes(q))
+    );
+  }
+  return tasks;
+}
+
 function sectorProgress(sectorId) {
   const tasks = tasksForSector(sectorId);
   if (tasks.length === 0) return { pct: 0, klaar: 0, total: 0 };
@@ -116,7 +153,7 @@ function isOverdue(task) {
 }
 
 function progressBar(pct) {
-  const cls = pct >= 100 ? '' : pct > 0 ? ' partial' : ' empty';
+  const cls = pct >= 100 ? '' : pct > 0 ? ' partial' : ' zero';
   const width = pct <= 0 ? 0 : Math.max(pct, 4); // bij 0% niets tonen (geen grijs bolletje)
   return el('div', { class: 'progress' }, [
     el('div', { class: 'progress-fill' + cls, style: `width:${width}%` })
@@ -156,8 +193,16 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !overlay
 // ---------- Router ----------
 function router() {
   const m = (location.hash || '#/').match(/^#\/sector\/(.+)$/);
+  const newRoute = m ? 'sector:' + decodeURIComponent(m[1]) : 'home';
+  animateView = newRoute !== lastRoute; // alleen animeren bij échte navigatie, niet bij verversen
+  navDir = m ? 'right' : 'left';
+  lastRoute = newRoute;
   if (m) renderSector(decodeURIComponent(m[1]));
   else renderHome();
+}
+
+function viewClass() {
+  return 'view' + (animateView ? (navDir === 'right' ? ' view-in-right' : ' view-in-left') : '');
 }
 window.addEventListener('hashchange', router);
 
@@ -165,14 +210,14 @@ window.addEventListener('hashchange', router);
 function renderHome() {
   setAppbar(el('div', { class: 'appbar-title' }, [el('span', { text: '🎭' }), el('span', { text: 'Draaiboek' })]));
 
-  appEl.innerHTML = '';
-  appEl.appendChild(el('div', { class: 'greeting' }, [
+  const view = el('div', { class: viewClass() });
+  view.appendChild(el('div', { class: 'greeting' }, [
     el('h1', { text: 'Onze draaiboeken' }),
     el('p', { text: 'Tik op een draaiboek om de taken te zien.' })
   ]));
 
   if (state.sectors.length === 0) {
-    appEl.appendChild(emptyState('🎭', 'Nog geen draaiboeken', 'Voeg er hieronder één toe, bijvoorbeeld voor de Decorcommissie.'));
+    view.appendChild(emptyState('🎭', 'Nog geen draaiboeken', 'Voeg er hieronder één toe, bijvoorbeeld voor de Decorcommissie.'));
   } else {
     const list = el('div', { class: 'sector-list' });
     for (const s of state.sectors) {
@@ -190,9 +235,11 @@ function renderHome() {
         el('div', { class: 'sector-chev', text: '›' })
       ]));
     }
-    appEl.appendChild(list);
+    view.appendChild(list);
   }
 
+  appEl.innerHTML = '';
+  appEl.appendChild(view);
   appEl.appendChild(fab('Draaiboek toevoegen', () => openSectorForm()));
 }
 
@@ -210,11 +257,14 @@ function renderSector(sectorId) {
     el('button', { class: 'appbar-back', onclick: () => openSectorForm(sector), 'aria-label': 'Commissie bewerken' }, ['✎'])
   ]);
 
-  const tasks = tasksForSector(sectorId);
+  // Filters resetten als je een andere sector binnenkomt.
+  if (filterSectorId !== sectorId) { filterStatus = 'alles'; filterPerson = ''; searchQuery = ''; filterSectorId = sectorId; }
+
+  const allTasks = tasksForSector(sectorId);
   const p = sectorProgress(sectorId);
 
-  appEl.innerHTML = '';
-  appEl.appendChild(el('div', { class: 'summary' }, [
+  const view = el('div', { class: viewClass() });
+  view.appendChild(el('div', { class: 'summary' }, [
     el('div', { class: 'summary-top' }, [
       el('div', { class: 'summary-pct', text: `${p.pct}%` }),
       el('div', { class: 'summary-count', text: p.total === 0 ? 'Nog geen taken' : `${p.klaar}/${p.total} taken klaar` })
@@ -222,21 +272,74 @@ function renderSector(sectorId) {
     progressBar(p.pct)
   ]));
 
-  if (tasks.length === 0) {
-    appEl.appendChild(emptyState('📋', 'Nog geen taken', 'Voeg de eerste taak toe met de knop rechtsonder.'));
-  } else {
-    const list = el('div', { class: 'task-list' });
-    for (const t of tasks) list.appendChild(renderTaskCard(t));
-    appEl.appendChild(list);
+  if (allTasks.length === 0) {
+    view.appendChild(emptyState('📋', 'Nog geen taken', 'Voeg de eerste taak toe met de knop rechtsonder.'));
+    appEl.innerHTML = '';
+    appEl.appendChild(view);
+    appEl.appendChild(fab('Taak', () => openTaskForm(sectorId)));
+    return;
   }
 
+  // Lijst-container die alleen verversen we bij zoeken/filteren (zo blijft de focus in de zoekbalk).
+  const listContainer = el('div', {});
+  const renderList = () => {
+    listContainer.innerHTML = '';
+    const tasks = filteredTasks(sectorId);
+    if (tasks.length === 0) {
+      listContainer.appendChild(emptyState('🔍', 'Niets gevonden', 'Pas je zoekopdracht of filter aan.'));
+    } else {
+      const list = el('div', { class: 'task-list' });
+      for (const t of tasks) list.appendChild(renderTaskCard(t));
+      listContainer.appendChild(list);
+    }
+  };
+
+  view.appendChild(buildControls(sectorId, renderList));
+  view.appendChild(listContainer);
+  renderList();
+
+  appEl.innerHTML = '';
+  appEl.appendChild(view);
   appEl.appendChild(fab('Taak', () => openTaskForm(sectorId)));
+}
+
+function buildControls(sectorId, renderList) {
+  const controls = el('div', { class: 'controls' });
+
+  // Zoekbalk
+  const search = el('input', { type: 'text', class: 'search-input', placeholder: 'Zoek in taken en stappen…', value: searchQuery });
+  search.addEventListener('input', () => { searchQuery = search.value; renderList(); });
+  const searchWrap = el('div', { class: 'search-wrap' }, [el('span', { class: 'search-ico', text: '🔍' }), search]);
+  if (searchQuery) searchWrap.appendChild(el('button', { class: 'search-clear', 'aria-label': 'Wissen', onclick: () => { searchQuery = ''; search.value = ''; renderList(); search.focus(); } }, ['✕']));
+  controls.appendChild(searchWrap);
+
+  // Statusfilter
+  const seg = el('div', { class: 'filter-seg' });
+  [{ key: 'alles', label: 'Alles' }, { key: 'open', label: 'Te doen' }, { key: 'bezig', label: 'Bezig' }, { key: 'klaar', label: 'Klaar' }].forEach((o) => {
+    const b = el('button', { class: 'fseg-btn' + (filterStatus === o.key ? ' active' : ''), text: o.label });
+    b.addEventListener('click', () => { filterStatus = o.key; seg.querySelectorAll('.fseg-btn').forEach((x) => x.classList.remove('active')); b.classList.add('active'); renderList(); });
+    seg.appendChild(b);
+  });
+  controls.appendChild(seg);
+
+  // Persoonsfilter (alleen tonen als er namen zijn)
+  const people = peopleInSector(sectorId);
+  if (filterPerson && !people.includes(filterPerson)) filterPerson = '';
+  if (people.length) {
+    const sel = el('select', { class: 'input person-select' });
+    sel.appendChild(el('option', { value: '', text: '👤 Iedereen' }));
+    people.forEach((pn) => sel.appendChild(el('option', { value: pn, text: pn, ...(pn === filterPerson ? { selected: 'selected' } : {}) })));
+    sel.addEventListener('change', () => { filterPerson = sel.value; renderList(); });
+    controls.appendChild(sel);
+  }
+
+  return controls;
 }
 
 function renderTaskCard(task) {
   const prog = taskProgress(task);
   const done = prog.pct === 100;
-  const isOpen = expanded.has(task.id);
+  const isOpen = expandedTask === task.id;
   const prioLabel = (PRIORITIES.find((p) => p.key === task.priority) || {}).label || task.priority;
   const statusObj = STATUSSES.find((s) => s.key === task.status) || STATUSSES[0];
 
@@ -279,12 +382,17 @@ function renderTaskCard(task) {
 }
 
 function toggleTask(id) {
-  if (expanded.has(id)) expanded.delete(id); else expanded.add(id);
+  const opening = expandedTask !== id;
+  expandedTask = opening ? id : null; // accordion: andere taken klappen dicht
+  justOpenedTask = opening ? id : null;
+  editingStepId = null;
+  addingStepFor = null;
   router();
 }
 
 function renderTaskBody(task) {
-  const body = el('div', { class: 'task-body' });
+  const body = el('div', { class: 'task-body' + (justOpenedTask === task.id ? ' anim-in' : '') });
+  if (justOpenedTask === task.id) justOpenedTask = null;
 
   // Status segmented control
   body.appendChild(el('div', { class: 'section-label', text: 'Status' }));
@@ -292,7 +400,7 @@ function renderTaskBody(task) {
   STATUSSES.forEach((s) => {
     seg.appendChild(el('button', {
       class: 'seg-btn s-' + s.key + (task.status === s.key ? ' active' : ''),
-      onclick: async () => { editingStepId = null; await api('PATCH', `/api/tasks/${task.id}`, { status: s.key }); await refresh(); }
+      onclick: async () => { editingStepId = null; addingStepFor = null; await api('PATCH', `/api/tasks/${task.id}`, { status: s.key }); await refresh(); }
     }, [s.short]));
   });
   body.appendChild(seg);
@@ -319,7 +427,16 @@ function renderSteps(task) {
 
   // Afvinken mag alleen als de taak "Bezig" is.
   const canCheck = task.status === 'bezig';
-  wrap.appendChild(el('div', { class: 'section-label', text: subs.length ? `Stappen (${subs.filter(s => s.done).length}/${subs.length})` : 'Stappen' }));
+  const adding = addingStepFor === task.id;
+
+  // Koptekst met een "+"-knop rechts; het invoerveld verschijnt pas na een tik.
+  wrap.appendChild(el('div', { class: 'steps-head' }, [
+    el('div', { class: 'section-label', text: subs.length ? `Stappen (${subs.filter(s => s.done).length}/${subs.length})` : 'Stappen' }),
+    el('button', {
+      class: 'steps-add-btn' + (adding ? ' active' : ''), 'aria-label': 'Stap toevoegen',
+      onclick: () => { addingStepFor = adding ? null : task.id; editingStepId = null; router(); }
+    }, ['+'])
+  ]));
   if (task.status === 'open' && subs.length) {
     wrap.appendChild(el('div', { class: 'steps-hint', text: 'Zet de taak op "Bezig" om stappen af te vinken.' }));
   }
@@ -330,7 +447,12 @@ function renderSteps(task) {
       'aria-label': 'Stap afvinken', text: sub.done ? '✓' : ''
     });
     if (canCheck) check.addEventListener('click', async () => {
-      await api('PATCH', `/api/tasks/${task.id}/subtasks/${sub.id}`, { done: !sub.done });
+      const willBe = !sub.done;
+      check.classList.add('pop');                 // popje
+      check.classList.toggle('done', willBe);     // directe visuele feedback
+      check.textContent = willBe ? '✓' : '';
+      await new Promise((r) => setTimeout(r, 170));
+      await api('PATCH', `/api/tasks/${task.id}/subtasks/${sub.id}`, { done: willBe });
       await refresh();
     });
 
@@ -357,25 +479,41 @@ function renderSteps(task) {
       });
     }
 
-    wrap.appendChild(el('div', { class: 'subtask' }, [
+    const row = el('div', { class: 'subtask' + (justAddedStepId === sub.id ? ' step-in' : '') }, [
       check, titleNode,
       el('button', {
         class: 'subtask-del', 'aria-label': 'Stap verwijderen',
-        onclick: async () => { editingStepId = null; await api('DELETE', `/api/tasks/${task.id}/subtasks/${sub.id}`); await refresh(); }
+        onclick: async (e) => {
+          editingStepId = null;
+          const r = e.currentTarget.closest('.subtask');
+          if (r) { r.classList.add('step-out'); await new Promise((res) => setTimeout(res, 210)); }
+          await api('DELETE', `/api/tasks/${task.id}/subtasks/${sub.id}`);
+          await refresh();
+        }
       }, ['✕'])
-    ]));
+    ]);
+    if (justAddedStepId === sub.id) justAddedStepId = null;
+    wrap.appendChild(row);
   }
 
-  // Nieuwe stap toevoegen (mag bij "Te doen" én "Bezig").
-  const stepInput = el('input', { type: 'text', placeholder: 'Nieuwe stap, bijv. "Verven"' });
-  const addStep = async () => {
-    const v = stepInput.value.trim();
-    if (!v) return;
-    await api('POST', `/api/tasks/${task.id}/subtasks`, { title: v });
-    await refresh();
-  };
-  stepInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') addStep(); });
-  wrap.appendChild(el('div', { class: 'subtask-add' }, [stepInput, el('button', { class: 'btn btn-sm', onclick: addStep }, ['Toevoegen'])]));
+  // Nieuwe stap toevoegen (mag bij "Te doen" én "Bezig"), alleen zichtbaar na de "+".
+  if (adding) {
+    const stepInput = el('input', { type: 'text', placeholder: 'Nieuwe stap, bijv. "Verven"' });
+    const addStep = async () => {
+      const v = stepInput.value.trim();
+      if (!v) { addingStepFor = null; router(); return; }
+      const updated = await api('POST', `/api/tasks/${task.id}/subtasks`, { title: v });
+      if (updated && updated.subtasks && updated.subtasks.length) justAddedStepId = updated.subtasks[updated.subtasks.length - 1].id;
+      addingStepFor = task.id; // open houden zodat je meerdere stappen achter elkaar kunt toevoegen
+      await refresh();
+    };
+    stepInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') addStep();
+      else if (e.key === 'Escape') { addingStepFor = null; router(); }
+    });
+    setTimeout(() => stepInput.focus(), 30);
+    wrap.appendChild(el('div', { class: 'subtask-add' }, [stepInput, el('button', { class: 'btn btn-sm', onclick: addStep }, ['Toevoegen'])]));
+  }
 
   return wrap;
 }
@@ -491,7 +629,7 @@ function openTaskForm(sectorId, task) {
     const deadlineType = dlType === 'geen' ? '' : dlType;
     const payload = { title: titleInput.value, assignee: assigneeInput.value, deadline, deadlineType, priority, status, notes: notesInput.value };
     if (isEdit) await api('PATCH', `/api/tasks/${task.id}`, payload);
-    else { const nt = await api('POST', '/api/tasks', { sectorId, ...payload }); if (nt && nt.id) expanded.add(nt.id); }
+    else { const nt = await api('POST', '/api/tasks', { sectorId, ...payload }); if (nt && nt.id) expandedTask = nt.id; }
     closeSheet(); await refresh();
   };
 
@@ -508,7 +646,7 @@ function confirmDeleteTask(task) {
   ]);
   openSheet('Taak verwijderen?', body, [
     el('button', { class: 'btn btn-ghost', onclick: closeSheet }, ['Nee, behouden']),
-    el('button', { class: 'btn btn-danger', onclick: async () => { await api('DELETE', `/api/tasks/${task.id}`); expanded.delete(task.id); closeSheet(); await refresh(); } }, ['Ja, verwijderen'])
+    el('button', { class: 'btn btn-danger', onclick: async () => { await api('DELETE', `/api/tasks/${task.id}`); if (expandedTask === task.id) expandedTask = null; closeSheet(); await refresh(); } }, ['Ja, verwijderen'])
   ]);
 }
 
